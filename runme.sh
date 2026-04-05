@@ -1,15 +1,16 @@
 #!/bin/bash
 
-mkdir test
+mkdir -p test
 
-gcc -o test/myprogram sparce.c
+gcc -o test/myprogram sparse.c
 
 pushd test
 
 FILE_SIZE=$((4 * 1024 * 1024 + 1))
-OUTPUT_FILE="fileA"
+OUTPUT_FILE="A"
 
-truncate -s $FILE_SIZE fileA
+truncate -s $FILE_SIZE A
+dd if=A of=A conv=notrunc
 
 echo '1' | dd of="$OUTPUT_FILE" bs=1 seek=0 count=1 conv=notrunc
 
@@ -17,24 +18,28 @@ echo '1' | dd of="$OUTPUT_FILE" bs=1 seek=10000 count=1 conv=notrunc
 
 echo '1' | dd of="$OUTPUT_FILE" bs=1 seek=$((FILE_SIZE - 1)) count=1 conv=notrunc
 
-./myprogram fileA fileB
+./myprogram A B
 
-gzip -k fileA
-gzip -k fileB
+gzip -kf A
+gzip -kf B
 
-gzip -cd fileB.gz | ./myprogram fileC
+gzip -cd B.gz | ./myprogram C
 
-BLOCK_SIZE=100 ./myprogram fileA fileD
+BLOCK_SIZE=100 ./myprogram A D
 
-stat fileA
-stat fileA.gz
-stat fileB
-stat fileB.gz
-stat fileC
-stat fileD
+stat A
+stat A.gz
+stat B
+stat B.gz
+stat C
+stat D
 
-echo -e "File\tApparent\tDisk blocks"
-ls -l --block-size=1 fileA fileA.gz fileB fileB.gz fileC fileD | awk '{print $9 "\t" $5 "\t" $5}'
-du -h fileA fileA.gz fileB fileB.gz fileC fileD
+for file in A A.gz B B.gz C D; do
+    if [ -f "$file" ]; then
+        printf "%-8s %s\n" "$file:" "$(stat --format="size=%s blocks=%b" "$file")"
+    else
+        echo "$file: not found"
+    fi
+done
 
 popd
