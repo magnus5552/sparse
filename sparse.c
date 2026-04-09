@@ -73,60 +73,31 @@ int main(int argc, char *argv[])
 
     while ((bytes_read = read(input_fd, block, block_size)) > 0)
     {
+        int all_zero = 1;
         for (ssize_t i = 0; i < bytes_read; i++)
         {
-            if (block[i] == 0)
+            if (block[i] != 0)
             {
-                if (data_size > 0)
-                {
-                    if (write(output_fd, block + data_start, data_size) < 0)
-                    {
-                        perror("Error writing to output file");
-                        free(block);
-                        close(output_fd);
-                        if (input_file != NULL)
-                            close(input_fd);
-                        exit(1);
-                    }
-                    data_start = -1;
-                    data_size = 0;
-                }
-
-                if (hole_start == -1)
-                {
-                    hole_start = total_written;
-                }
-                hole_size++;
+                all_zero = 0;
+                break;
             }
-            else
-            {
-                if (hole_size > 0)
-                {
-                    if (lseek(output_fd, hole_start + hole_size, SEEK_SET) < 0)
-                    {
-                        perror("Error seeking in output file");
-                        free(block);
-                        close(output_fd);
-                        if (input_file != NULL)
-                            close(input_fd);
-                        exit(1);
-                    }
-                    hole_start = -1;
-                    hole_size = 0;
-                }
-
-                if (data_start == -1)
-                {
-                    data_start = i;
-                }
-                data_size++;
-            }
-            total_written++;
         }
-        
-        if (data_size > 0)
+
+        if (bytes_read == block_size && all_zero)
         {
-            if (write(output_fd, block + data_start, data_size) < 0)
+            if (lseek(output_fd, bytes_read, SEEK_CUR) < 0)
+            {
+                perror("Error seeking in output file");
+                free(block);
+                close(output_fd);
+                if (input_file != NULL)
+                    close(input_fd);
+                exit(1);
+            }
+        }
+        else
+        {
+            if (write(output_fd, block, bytes_read) < 0)
             {
                 perror("Error writing to output file");
                 free(block);
@@ -135,9 +106,8 @@ int main(int argc, char *argv[])
                     close(input_fd);
                 exit(1);
             }
-            data_start = -1;
-            data_size = 0;
-        }       
+        }
+        total_written += bytes_read;
     }
 
     if (bytes_read < 0)
@@ -150,12 +120,9 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    if (hole_size > 0)
+    if (ftruncate(output_fd, total_written) < 0)
     {
-        if (ftruncate(output_fd, hole_start + hole_size) < 0)
-        {
-            perror("Error setting final file size");
-        }
+        perror("Error setting final file size");
     }
 
     free(block);
